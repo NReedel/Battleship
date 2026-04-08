@@ -22,6 +22,53 @@
             margin-bottom: 30px;
         }
 
+        @media (max-width: 768px) or (orientation: portrait) {
+            .game-container {
+                flex-direction: column;
+                gap: 15px;
+                margin-bottom: 15px;
+                align-items: center;
+            }
+
+            .board {
+                grid-template-columns: repeat(10, 7vw);
+                grid-template-rows: repeat(10, 7vw);
+                max-width: 350px;
+                max-height: 350px;
+            }
+
+            .cell {
+                width: 7vw;
+                height: 7vw;
+                max-width: 35px;
+                max-height: 35px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+                margin: 5px 0;
+            }
+
+            h2 {
+                font-size: 1.1rem;
+                margin: 5px 0;
+            }
+
+            .status-container {
+                width: 95%;
+                padding: 10px;
+            }
+
+            #status-text {
+                font-size: 1rem;
+            }
+
+            body {
+                margin: 10px;
+                justify-content: center;
+            }
+        }
+
         .board-container {
             text-align: center;
         }
