@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battleship vs AI</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            margin: 20px;
+            transition: background-color 0.5s;
+        }
+
+        .game-container {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 30px;
+        }
+
+        .board-container {
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 10px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(10, 30px);
+            grid-template-rows: repeat(10, 30px);
+            background-color: #34495e;
+            padding: 5px;
+            border: 3px solid #7f8c8d;
+            border-radius: 4px;
+        }
+
+        .cell {
+            width: 30px;
+            height: 30px;
+            background-color: #3498db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: default;
+            transition: background-color 0.2s;
+            box-sizing: border-box;
+            border: 0.1px solid rgba(255,255,255,0.1); /* Subtle grid line */
+        }
+
+        .ai .cell:not(.revealed):hover {
+            background-color: #2980b9;
+            cursor: crosshair;
+        }
+
+        /* Ship Border Logic */
+        .cell.ship { background-color: #95a5a6; }
+        .cell.ship-border-top { border-top: 2px solid black; }
+        .cell.ship-border-bottom { border-bottom: 2px solid black; }
+        .cell.ship-border-left { border-left: 2px solid black; }
+        .cell.ship-border-right { border-right: 2px solid black; }
+
+        .cell.hit { background-color: #e74c3c; }
+        .cell.miss { background-color: #ecf0f1; }
+        .cell.hit::after { content: 'X'; color: white; font-weight: bold; }
+        .cell.miss::after { content: '•'; color: #34495e; font-size: 20px; }
+
+        .status-container {
+            width: 80%;
+            max-width: 600px;
+            background-color: #34495e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        #status-text {
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+            min-height: 1.5em;
+        }
+
+        button {
+            padding: 10px 25px;
+            font-size: 1rem;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button.secondary { background-color: #3498db; }
+        button.secondary:hover { background-color: #2980b9; }
+
+        button:hover { background-color: #27ae60; }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>BATTLESHIP</h1>
+
+    <div class="game-container">
+        <div class="board-container">
+            <h2>Your Fleet</h2>
+            <div id="player-board" class="board"></div>
+        </div>
+        <div class="board-container">
+            <h2>AI Operations</h2>
+            <div id="ai-board" class="board ai"></div>
+        </div>
+    </div>
+
+    <div class="status-container">
+        <div id="status-text">Welcome, Admiral. Place your ships or use Auto-Place to begin!</div>
+        <div class="controls">
+            <button id="auto-place-btn">Auto-Place Ships</button>
+            <!-- <button id="download-btn" class="secondary">Download Game Data</button> -->
+        </div>
+    </div>
+
+    <script>
+        const GRID_SIZE = 10;
+        const SHIPS = [
+            { name: "Carrier", size: 5 },
+            { name: "Battleship", size: 4 },
+            { name: "Cruiser", size: 3 },
+            { name: "Submarine", size: 3 },
+            { name: "Destroyer", size: 2 }
+        ];
+
+        let playerBoard = [];
+        let aiBoard = [];
+        let playerShips = [];
+        let aiShips = [];
+        let isPlayerTurn = true;
+        let gameActive = false;
+        let aiTargetingStack = [];
+
+        const playerBoardEl = document.getElementById('player-board');
+        const aiBoardEl = document.getElementById('ai-board');
+        const statusTextEl = document.getElementById('status-text');
+        const autoPlaceBtn = document.getElementById('auto-place-btn');
+        const downloadBtn = document.getElementById('download-btn');
+
+        function init() {
+            playerBoard = createBoardData();
+            aiBoard = createBoardData();
+            aiShips = placeShipsRandomly(aiBoard);
+            renderBoard(playerBoard, playerBoardEl, false);
+            renderBoard(aiBoard, aiBoardEl, true);
+
+            autoPlaceBtn.addEventListener('click', handleAutoPlace);
+            downloadBtn.addEventListener('click', downloadGameData);
+        }
+
+        function createBoardData() {
+            return Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+        }
+
+        function placeShipsRandomly(board) {
+            const placedShips = [];
+            SHIPS.forEach(shipInfo => {
+                let placed = false;
+                while (!placed) {
+                    const isHorizontal = Math.random() < 0.5;
+                    const r = Math.floor(Math.random() * GRID_SIZE);
+                    const c = Math.floor(Math.random() * GRID_SIZE);
+
+                    if (canPlace(board, r, c, shipInfo.size, isHorizontal)) {
+                        const coordinates = [];
+                        for (let i = 0; i < shipInfo.size; i++) {
+                            const row = isHorizontal ? r : r + i;
+                            const col = isHorizontal ? c + i : c;
+                            board[row][col] = shipInfo.name;
+                            coordinates.push({ r: row, c: col, hit: false, isHorizontal });
+                        }
+                        placedShips.push({ name: shipInfo.name, coordinates, sunk: false, isHorizontal });
+                        placed = true;
+                    }
+                }
+            });
+            return placedShips;
+        }
+
+        function canPlace(board, r, c, size, isHorizontal) {
+            if (isHorizontal) {
+                if (c + size > GRID_SIZE) return false;
+                for (let i = 0; i < size; i++) if (board[r][c + i] !== 0) return false;
+            } else {
+                if (r + size > GRID_SIZE) return false;
+                for (let i = 0; i < size; i++) if (board[r + i][c] !== 0) return false;
+            }
+            return true;
+        }
+
+        function renderBoard(data, container, isAI) {
+            container.innerHTML = '';
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    if (!isAI && data[r][c] !== 0) {
+                        cell.classList.add('ship');
+                        addShipBorders(cell, data, r, c);
+                    }
+                    if (isAI) cell.addEventListener('click', () => handlePlayerAttack(r, c));
+                    container.appendChild(cell);
+                }
+            }
+        }
+
+        function addShipBorders(cell, board, r, c) {
+            const shipName = board[r][c];
+            // Check neighbors of the same ship name
+            if (r === 0 || board[r-1][c] !== shipName) cell.classList.add('ship-border-top');
+            if (r === GRID_SIZE-1 || board[r+1][c] !== shipName) cell.classList.add('ship-border-bottom');
+            if (c === 0 || board[r][c-1] !== shipName) cell.classList.add('ship-border-left');
+            if (c === GRID_SIZE-1 || board[r][c+1] !== shipName) cell.classList.add('ship-border-right');
+        }
+
+        function updateCell(container, r, c, type) {
+            const cell = container.children[r * GRID_SIZE + c];
+            cell.classList.add('revealed', type);
+        }
+
+        function handleAutoPlace() {
+            if (gameActive) return;
+            playerBoard = createBoardData();
+            playerShips = placeShipsRandomly(playerBoard);
+            renderBoard(playerBoard, playerBoardEl, false);
+            gameActive = true;
+            autoPlaceBtn.disabled = true;
+            statusTextEl.innerText = "Ships deployed! Admiral, it's your turn. Select coordinates.";
+        }
+
+        function flashBackground(color, permanent = false) {
+            document.body.style.backgroundColor = color;
+            if (!permanent) {
+                setTimeout(() => {
+                    if (gameActive) document.body.style.backgroundColor = "#2c3e50";
+                }, 2000);
+            }
+        }
+
+        async function handlePlayerAttack(r, c) {
+            if (!isPlayerTurn || !gameActive || aiBoard[r][c] === 'miss' || aiBoard[r][c] === 'hit') return;
+
+            const targetShipName = aiBoard[r][c];
+            const hit = targetShipName !== 0;
+            aiBoard[r][c] = hit ? 'hit' : 'miss';
+            updateCell(aiBoardEl, r, c, hit ? 'hit' : 'miss');
+
+            if (hit) {
+                const ship = aiShips.find(s => s.name === targetShipName);
+                const coord = ship.coordinates.find(co => co.r === r && co.c === c);
+                coord.hit = true;
+                if (ship.coordinates.every(co => co.hit)) {
+                    ship.sunk = true;
+                    statusTextEl.innerText = `You sunk the enemy's ${ship.name}!`;
+                    flashBackground('#27ae60'); // Green
+                } else {
+                    statusTextEl.innerText = "Direct hit on enemy ship!";
+                }
+            } else {
+                statusTextEl.innerText = "Splash! We missed.";
+            }
+
+            if (checkGameOver()) return;
+            isPlayerTurn = false;
+            setTimeout(startAITurn, 2000);
+        }
+
+        function startAITurn() {
+            statusTextEl.innerText = "Enemy is calculating coordinates...";
+            setTimeout(() => {
+                let r, c;
+                if (aiTargetingStack.length > 0) {
+                    const target = aiTargetingStack.shift();
+                    r = target.r; c = target.c;
+                } else {
+                    do {
+                        r = Math.floor(Math.random() * GRID_SIZE);
+                        c = Math.floor(Math.random() * GRID_SIZE);
+                    } while (playerBoard[r][c] === 'hit' || playerBoard[r][c] === 'miss');
+                }
+
+                const targetShipName = playerBoard[r][c];
+                const hit = (targetShipName !== 0 && targetShipName !== 'miss');
+                playerBoard[r][c] = hit ? 'hit' : 'miss';
+                updateCell(playerBoardEl, r, c, hit ? 'hit' : 'miss');
+
+                if (hit) {
+                    const ship = playerShips.find(s => s.name === targetShipName);
+                    const coord = ship.coordinates.find(co => co.r === r && co.c === c);
+                    coord.hit = true;
+
+                    const adj = [{r: r-1, c}, {r: r+1, c}, {r: r, c: c-1}, {r: r, c: c+1}];
+                    adj.forEach(p => {
+                        if (p.r >= 0 && p.r < GRID_SIZE && p.c >= 0 && p.c < GRID_SIZE &&
+                            playerBoard[p.r][p.c] !== 'hit' && playerBoard[p.r][p.c] !== 'miss' &&
+                            !aiTargetingStack.some(s => s.r === p.r && s.c === p.c)) {
+                            aiTargetingStack.push(p);
+                        }
+                    });
+
+                    if (ship.coordinates.every(co => co.hit)) {
+                        ship.sunk = true;
+                        statusTextEl.innerText = `The enemy sunk our ${ship.name}!`;
+                        flashBackground('#c0392b'); // Red
+                        aiTargetingStack = [];
+                    } else {
+                        statusTextEl.innerText = "The enemy hit one of our ships!";
+                    }
+                } else {
+                    statusTextEl.innerText = "The enemy missed.";
+                }
+
+                if (checkGameOver()) return;
+                setTimeout(() => {
+                    statusTextEl.innerText = "Admiral, it's your turn. Select coordinates.";
+                    isPlayerTurn = true;
+                }, 1500);
+            }, 1000);
+        }
+
+        function checkGameOver() {
+            if (aiShips.every(s => s.sunk)) {
+                statusTextEl.innerText = "VICTORY! All enemy ships destroyed!";
+                gameActive = false;
+                flashBackground('#27ae60', true);
+                return true;
+            } else if (playerShips.every(s => s.sunk)) {
+                statusTextEl.innerText = "DEFEAT! Our fleet has been sunk.";
+                gameActive = false;
+                flashBackground('#c0392b', true);
+                return true;
+            }
+            return false;
+        }
+
+        function downloadGameData() {
+            const gameData = {
+                timestamp: new Date().toISOString(),
+                playerShips: playerShips,
+                aiShips: aiShips,
+                isPlayerTurn: isPlayerTurn
+            };
+            const blob = new Blob([JSON.stringify(gameData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `battleship_${new Date().getTime()}.json`;
+            a.click();
+        }
+
+        init();
+    </script>
+</body>
+</html>
