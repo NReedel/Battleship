@@ -51,18 +51,17 @@
         }
 
         /* Mobile portrait mode - stacked vertically, compact to fit on screen without scrolling */
-        /* Use max-width only since orientation detection is unreliable on some devices */
-        @media (max-width: 550px) {
+        @media (max-width: 575px) {
             body {
                 margin: 5px;
                 justify-content: flex-start;
                 gap: 3px;
                 position: relative;
+                min-height: auto;
             }
 
             h1 {
                 writing-mode: vertical-rl;
-                transform: rotate(180deg);
                 font-size: 1.2rem;
                 margin: 0;
                 padding: 0;
@@ -78,64 +77,66 @@
                 gap: 5px;
                 margin-bottom: 3px;
                 align-items: center;
-                margin-right: 25px;
+                margin-right: 0;
             }
 
             .board-container {
                 display: flex;
-                flex-direction: row;
+                flex-direction: column;
                 align-items: center;
                 gap: 2px;
                 margin-bottom: 0;
             }
 
             .board-container h2 {
-                writing-mode: vertical-rl;
-                transform: rotate(180deg);
-                font-size: 0.7rem;
-                margin: 0;
+                writing-mode: horizontal-tb;
+                transform: none;
+                font-size: 0.8rem;
+                margin: 2px 0;
                 padding: 0;
                 white-space: nowrap;
             }
 
             .board {
-                grid-template-columns: repeat(10, 6.8vw);
-                grid-template-rows: repeat(10, 7.8vw);
+                grid-template-columns: repeat(10, 8vw);
+                grid-template-rows: repeat(10, 8vw);
                 max-width: 100%;
-                padding: 1px;
+                padding: 2px;
                 border-width: 2px;
             }
 
             .cell {
-                width: 6vw;
-                height: 6.8vw;
+                width: 8vw;
+                height: 8vw;
                 max-width: 32px;
                 max-height: 32px;
             }
 
             .status-container {
                 width: 100%;
-                padding: .1px .75px;
-                margin-top: .1px;
-                margin-bottom: 0px;;
+                max-width: none;
+                padding: 5px 8px;
+                margin-top: 3px;
+                margin-bottom: 3px;
+                box-shadow: none;
             }
 
             #status-text {
-                font-size: .33rem;
-                margin-top: .1px;
-                margin-bottom: .4px;
-                min-height: 1.1em;
+                font-size: 0.75rem;
+                margin-top: 3px;
+                margin-bottom: 4px;
+                min-height: 1.2em;
             }
 
             .controls {
-                margin-top: 2px;
-                gap: 6px;
+                margin-top: 3px;
+                gap: 8px;
             }
 
             button {
-                padding: 2px 5px;
+                padding: 8px 12px;
                 font-size: 0.85rem;
-                min-height: 42px; /* Touch-friendly */
+                min-height: 42px;
                 min-width: 42px;
             }
         }
@@ -278,14 +279,19 @@
             transition: background-color 0.2s;
         }
 
-        button.secondary { background-color: #3498db; }
-        button.secondary:hover { background-color: #2980b9; }
-
         button:hover { background-color: #27ae60; }
         button:disabled {
             background-color: #95a5a6;
             cursor: not-allowed;
             opacity: 0.6;
+        }
+
+        .button-hidden {
+            visibility: hidden !important;
+        }
+
+        [hidden] {
+            display: none !important;
         }
     </style>
 </head>
@@ -308,7 +314,12 @@
         <div id="status-text">Welcome, Admiral. Place your ships or use Auto-Place to begin!</div>
         <div class="controls">
             <button id="auto-place-btn">Auto-Place Ships</button>
-            <!-- <button id="download-btn" class="secondary">Download Game Data</button> -->
+            <button id="play-again-btn" style="display: inline-block;" hidden>Play Again</button>
+        </div>
+    </div>
+    <div class="status-container" style="margin-top: 10px;">
+        <div class="controls">
+            <button id="instant-win-btn" style="background-color: #e74c3c;" hidden>Instant Win</button>
         </div>
     </div>
 
@@ -334,7 +345,8 @@
         const aiBoardEl = document.getElementById('ai-board');
         const statusTextEl = document.getElementById('status-text');
         const autoPlaceBtn = document.getElementById('auto-place-btn');
-        const downloadBtn = document.getElementById('download-btn');
+        const playAgainBtn = document.getElementById('play-again-btn');
+        const instantWinBtn = document.getElementById('instant-win-btn');
 
         function init() {
             playerBoard = createBoardData();
@@ -344,7 +356,8 @@
             renderBoard(aiBoard, aiBoardEl, true);
 
             autoPlaceBtn.addEventListener('click', handleAutoPlace);
-            downloadBtn.addEventListener('click', downloadGameData);
+            playAgainBtn.addEventListener('click', handleNewGame);
+            instantWinBtn.addEventListener('click', handleInstantWin);
         }
 
         function createBoardData() {
@@ -417,14 +430,19 @@
             cell.classList.add('revealed', type);
         }
 
+        function startGame() {
+            gameActive = true;
+            autoPlaceBtn.classList.add('button-hidden');
+            instantWinBtn.hidden = false;
+            statusTextEl.innerText = "Ships deployed! Admiral, it's your turn. Select coordinates.";
+        }
+
         function handleAutoPlace() {
             if (gameActive) return;
             playerBoard = createBoardData();
             playerShips = placeShipsRandomly(playerBoard);
             renderBoard(playerBoard, playerBoardEl, false);
-            gameActive = true;
-            autoPlaceBtn.disabled = true;
-            statusTextEl.innerText = "Ships deployed! Admiral, it's your turn. Select coordinates.";
+            startGame();
         }
 
         function flashBackground(color, permanent = false) {
@@ -516,35 +534,76 @@
                 }, 1500);
             }, 1000);
         }
-
-        function checkGameOver() {
+        function setGameover(){
             if (aiShips.every(s => s.sunk)) {
                 statusTextEl.innerText = "VICTORY! All enemy ships destroyed!";
-                gameActive = false;
-                flashBackground('#27ae60', true);
+            }
+            else if(playerShips.every(s => s.sunk)){
+                statusTextEl.innerText ="DEFEAT! Our fleet has been sunk.";
+            }
+        }
+        function checkGameOver() { 
+            if (aiShips.every(s => s.sunk)) { //win
+                statusTextEl.innerText = "VICTORY! All enemy ships destroyed!";
+                flashBackground('#27ae60', true); //green flash
+                autoPlaceBtn.classList.add('button-hidden');
+                // playAgainBtn.style.display = 'inline-block';
+                playAgainBtn.removeAttribute("hidden")
+                instantWinBtn.setAttribute("hidden")
                 return true;
-            } else if (playerShips.every(s => s.sunk)) {
+            } else if (playerShips.every(s => s.sunk)) { //lose
                 statusTextEl.innerText = "DEFEAT! Our fleet has been sunk.";
+                flashBackground('#c0392b', true); //red flash
+            }
+            // either win or loss
+            if(playerShips.every(s => s.sunk) || aiShips.every(s => s.sunk)){ 
                 gameActive = false;
-                flashBackground('#c0392b', true);
+                autoPlaceBtn.classList.add('button-hidden');
+                // playAgainBtn.style.display = 'inline-block';
+                playAgainBtn.removeAttribute("hidden")
+                instantWinBtn.hidden = true;
                 return true;
             }
             return false;
         }
 
-        function downloadGameData() {
-            const gameData = {
-                timestamp: new Date().toISOString(),
-                playerShips: playerShips,
-                aiShips: aiShips,
-                isPlayerTurn: isPlayerTurn
-            };
-            const blob = new Blob([JSON.stringify(gameData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `battleship_${new Date().getTime()}.json`;
-            a.click();
+        function handleNewGame() {
+            playerBoard = createBoardData();
+            aiBoard = createBoardData();
+            playerShips = [];
+            aiShips = [];
+            isPlayerTurn = true;
+            gameActive = false;
+            aiTargetingStack = [];
+
+            aiShips = placeShipsRandomly(aiBoard);
+            renderBoard(playerBoard, playerBoardEl, false);
+            renderBoard(aiBoard, aiBoardEl, true);
+
+            autoPlaceBtn.classList.remove('button-hidden');
+            playAgainBtn.hidden = true;
+            instantWinBtn.hidden = true;
+            statusTextEl.innerText = "Welcome, Admiral. Place your ships or use Auto-Place to begin!";
+            document.body.style.backgroundColor = "#2c3e50";
+        }
+
+        function handleInstantWin() {
+            if (!gameActive) return;
+
+            aiShips.forEach(ship => ship.sunk = true);
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (aiBoard[r][c] !== 0 && aiBoard[r][c] !== 'hit' && aiBoard[r][c] !== 'miss') {
+                        aiBoard[r][c] = 'hit';
+                        updateCell(aiBoardEl, r, c, 'hit');
+                    }
+                }
+            }
+            statusTextEl.innerText = "VICTORY! All enemy ships destroyed!";
+            gameActive = false;
+            flashBackground('#27ae60', true);
+            autoPlaceBtn.classList.add('button-hidden');
+            playAgainBtn.removeAttribute('hidden');
         }
 
         init();
